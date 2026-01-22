@@ -16,6 +16,12 @@ from src.agent.report import ReportAgent
 from src.utils.report_manager import report_manager
 from src.console import visualizer, clear_screen
 from rich.console import Console
+# 尝试导入reportlab库
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib import colors
 
 console = Console()
 
@@ -381,6 +387,7 @@ async def announce_result_with_tts(results: Dict[str, Any]):
         logger.error(f"语音播报失败: {str(e)}")
 
 
+
 def display_results(results: Dict[str, Any], output_format: str = "text", output_file: str | None = None):
     """Display or save research results."""
     # Handle JSON output
@@ -392,6 +399,93 @@ def display_results(results: Dict[str, Any], output_format: str = "text", output
         else:
             print(json.dumps(results, indent=2, ensure_ascii=False))
         return
+        # Handle PDF output
+        if output_format == "pdf":
+            if output_file:
+                try:
+                    # 创建PDF文档
+                    doc = SimpleDocTemplate(output_file, pagesize=A4)
+                    story = []
+
+                    # 获取样式
+                    styles = getSampleStyleSheet()
+                    title_style = styles['Title']
+                    heading_style = styles['Heading1']
+                    normal_style = styles['Normal']
+
+                    # 添加标题
+                    title = Paragraph("研究结果报告", title_style)
+                    story.append(title)
+                    story.append(Spacer(1, 20))
+
+                    # 遍历结果数据
+                    for section, data in results.items():
+                        # 添加章节标题
+                        section_title = Paragraph(section, heading_style)
+                        story.append(section_title)
+                        story.append(Spacer(1, 10))
+
+                        # 根据数据类型处理
+                        if isinstance(data, dict):
+                            # 处理字典类型数据
+                            for key, value in data.items():
+                                text = f"<b>{key}:</b> {value}"
+                                para = Paragraph(text, normal_style)
+                                story.append(para)
+                            story.append(Spacer(1, 10))
+
+                        elif isinstance(data, list):
+                            # 处理列表类型数据
+                            if data and isinstance(data[0], dict):
+                                # 列表中的元素是字典，创建表格
+                                if data:
+                                    # 获取表头
+                                    headers = list(data[0].keys())
+                                    # 准备表格数据
+                                    table_data = [headers]
+                                    for item in data:
+                                        row = [str(item.get(key, "")) for key in headers]
+                                        table_data.append(row)
+                                    # 创建表格
+                                    table = Table(table_data)
+                                    # 设置表格样式
+                                    table_style = TableStyle([
+                                        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                                        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                                        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                                    ])
+                                    table.setStyle(table_style)
+                                    story.append(table)
+                                    story.append(Spacer(1, 10))
+                            else:
+                                # 列表中的元素是其他类型，直接显示
+                                for item in data:
+                                    para = Paragraph(str(item), normal_style)
+                                    story.append(para)
+                                story.append(Spacer(1, 10))
+
+                        else:
+                            # 处理其他类型数据
+                            para = Paragraph(str(data), normal_style)
+                            story.append(para)
+                            story.append(Spacer(1, 10))
+
+                    # 构建PDF
+                    doc.build(story)
+                    logger.info(f"Results saved to {output_file}")
+                except ImportError:
+                    logger.error("reportlab library is required for PDF output")
+                    print(
+                        "Error: reportlab library is required for PDF output. Please install it with 'pip install reportlab'")
+                except Exception as e:
+                    logger.error(f"Failed to save PDF: {e}")
+                    print(f"Error saving PDF: {e}")
+            else:
+                print("PDF format requires an output file path")
+            return
 
     # For text output, results are already beautifully displayed during analysis
     # Just log completion
@@ -405,6 +499,8 @@ def display_results(results: Dict[str, Any], output_format: str = "text", output
         f.write(json.dumps(results, indent=2, ensure_ascii=False))
     
     logger.info(f"Results saved to {output_file}")
+
+
 
 
 async def main():
